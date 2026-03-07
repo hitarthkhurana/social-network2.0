@@ -1,0 +1,23 @@
+# Environment
+.env
+__pycache__/
+*.pyc
+
+# Generated data
+embeddings.json
+*.db
+
+# Media / test files
+*.mp4
+*.jpeg
+*.jpg
+*.png
+*.gif
+*.webp
+
+# macOS
+.DS_Store
+
+# IDE
+.claude/
+.vscode/

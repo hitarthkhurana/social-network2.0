@@ -1,7 +1,7 @@
-google-generativeai
+google-genai
+google-cloud-aiplatform
 yt-dlp
 opencv-python
-openai-whisper
 rich
 numpy
 Pillow

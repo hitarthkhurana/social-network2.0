@@ -7,6 +7,7 @@ Usage:
     python query.py stats             # storage stats
 """
 
+import os
 import sys
 from google import genai
 from rich.console import Console
@@ -51,14 +52,19 @@ def show_memory(memory: dict):
     imp = memory["importance"]
     bar = "█" * int(imp * 10) + "░" * (10 - int(imp * 10))
     ts = memory.get("timestamp", "")[:19].replace("T", " ")
-    kf = memory.get("keyframe_paths", [])
+    clips    = memory.get("clip_paths", [])
+    segments = memory.get("segments", [])
 
     content = f"""[bold]{memory['summary']}[/bold]
 
 [dim]Time:[/dim] {ts}  |  [dim]Source:[/dim] {memory.get('source', '?')}
 [dim]Importance:[/dim] {bar} {imp:.2f}  |  [dim]Level:[/dim] {memory.get('detail_level', '?')}
 [dim]Activity:[/dim] {memory.get('activity', '—')}  |  [dim]Tags:[/dim] {', '.join(memory.get('tags', [])) or '—'}
-[dim]Keyframes:[/dim] {len(kf)} stored{'' if kf else '  (NanoBanana 2 can reconstruct)'}"""
+[dim]Clips:[/dim] {len(clips)} saved{f'  → {", ".join(os.path.basename(c) for c in clips)}' if clips else '  (none)'}"""
+
+    if segments:
+        seg_str = "  ".join([f"{s['start']:.0f}s–{s['end']:.0f}s" for s in segments])
+        content += f"\n[dim]Segments:[/dim] {seg_str}"
 
     color = "red" if imp >= 0.8 else "yellow" if imp >= 0.5 else "green" if imp >= 0.2 else "dim"
     console.print(Panel(content, border_style=color))

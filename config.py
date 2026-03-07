@@ -1,15 +1,11 @@
 import os
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-if not GEMINI_API_KEY:
-    raise ValueError("Set GEMINI_API_KEY environment variable. Get a key at https://aistudio.google.com")
+# Vertex AI — everything runs through GCP project, no AI Studio key needed
+VERTEX_PROJECT  = os.environ.get("GOOGLE_CLOUD_PROJECT", "your-gcp-project-id")
+VERTEX_LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-GEMINI_FLASH_MODEL = "gemini-2.5-flash-lite"
-
-# Vertex AI multimodal embeddings
-VERTEX_PROJECT  = "seraphic-jet-489522-n9"
-VERTEX_LOCATION = "us-central1"
-EMBEDDING_MODEL = "multimodalembedding@001"  # 1408-dim, image + text
+GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite"   # via Vertex AI
+EMBEDDING_MODEL    = "multimodalembedding@001"  # 1408-dim, image + text
 
 # Importance thresholds
 IMPORTANCE_HIGH = 0.5

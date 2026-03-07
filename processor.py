@@ -3,33 +3,30 @@ import json
 import time
 import subprocess
 import numpy as np
-from google import genai
-from google.genai import types
 import vertexai
+from vertexai.generative_models import GenerativeModel, Part
 from vertexai.vision_models import MultiModalEmbeddingModel, Image as VertexImage
 
 from config import (
-    GEMINI_API_KEY, GEMINI_FLASH_MODEL, EMBEDDING_MODEL,
+    GEMINI_FLASH_MODEL, EMBEDDING_MODEL,
     VERTEX_PROJECT, VERTEX_LOCATION,
     IMPORTANCE_HIGH, CLIPS_DIR, CHUNK_DURATION_SEC
 )
 from storage import save_memory
 
-# Gemini client for video analysis
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-# Vertex AI for multimodal embeddings
+# All AI via Vertex AI — uses GCP project + $300 credits
 vertexai.init(project=VERTEX_PROJECT, location=VERTEX_LOCATION)
-embed_model = MultiModalEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
+gemini_model = GenerativeModel(GEMINI_FLASH_MODEL)
+embed_model  = MultiModalEmbeddingModel.from_pretrained(EMBEDDING_MODEL)
 
 
-def call_with_retry(fn, retries=3, base_delay=30):
+def call_with_retry(fn, retries=3, base_delay=15):
     for attempt in range(retries):
         try:
             return fn()
         except Exception as e:
             msg = str(e)
-            if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
+            if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
                 wait = base_delay * (attempt + 1)
                 print(f"  [rate limit] waiting {wait}s before retry {attempt+1}/{retries}...")
                 time.sleep(wait)
@@ -40,15 +37,16 @@ def call_with_retry(fn, retries=3, base_delay=30):
 
 def analyze_chunk(chunk_path: str, source: str, timestamp: str) -> dict:
     """
-    Single Gemini call on the video chunk.
+    Single Gemini call via Vertex AI on the video chunk.
     Gemini handles audio + video natively — no Whisper needed.
     Returns: importance, summary, metadata, and exact timestamps of important segments.
     """
-    print(f"  Uploading chunk to Gemini...")
-    uploaded = client.files.upload(
-        file=chunk_path,
-        config={"mime_type": "video/mp4"}
-    )
+    print(f"  Sending chunk to Gemini via Vertex AI...")
+
+    with open(chunk_path, "rb") as f:
+        video_bytes = f.read()
+
+    video_part = Part.from_data(data=video_bytes, mime_type="video/mp4")
 
     prompt = """Analyze this video segment. Do two things:
 
@@ -75,20 +73,10 @@ Return ONLY valid JSON:
 If importance < 0.5, return empty important_segments array."""
 
     def _call():
-        return client.models.generate_content(
-            model=GEMINI_FLASH_MODEL,
-            contents=[uploaded, prompt]
-        )
+        return gemini_model.generate_content([video_part, prompt])
 
     try:
         response = call_with_retry(_call)
-
-        # Clean up uploaded file
-        try:
-            client.files.delete(name=uploaded.name)
-        except Exception:
-            pass
-
         if response is None:
             return _fallback(source, timestamp)
 
@@ -99,10 +87,6 @@ If importance < 0.5, return empty important_segments array."""
 
     except Exception as e:
         print(f"  [analyze error] {e}")
-        try:
-            client.files.delete(name=uploaded.name)
-        except Exception:
-            pass
         return _fallback(source, timestamp)
 
 

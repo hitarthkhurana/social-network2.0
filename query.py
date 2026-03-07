@@ -9,18 +9,19 @@ Usage:
 
 import os
 import sys
-from google import genai
+import vertexai
+from vertexai.generative_models import GenerativeModel
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
 
-from config import GEMINI_API_KEY, GEMINI_FLASH_MODEL
+from config import VERTEX_PROJECT, VERTEX_LOCATION, GEMINI_FLASH_MODEL
 from storage import init_db, get_all_memories, search_by_embedding, get_stats
 from processor import get_embedding
-from reconstruct import reconstruct_image
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+vertexai.init(project=VERTEX_PROJECT, location=VERTEX_LOCATION)
+gemini_model = GenerativeModel(GEMINI_FLASH_MODEL)
 console = Console()
 
 
@@ -39,10 +40,7 @@ Question: {query}
 Answer directly. If memories don't have enough info, say so."""
 
     try:
-        response = client.models.generate_content(
-            model=GEMINI_FLASH_MODEL,
-            contents=prompt
-        )
+        response = gemini_model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         return f"Could not synthesize answer: {e}"

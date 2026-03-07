@@ -12,7 +12,8 @@ from config import (
     VERTEX_PROJECT, VERTEX_LOCATION,
     IMPORTANCE_HIGH, CLIPS_DIR, CHUNK_DURATION_SEC
 )
-from storage import save_memory
+from storage import save_memory, save_person, update_person, get_all_people
+from faces import detect_faces, match_face
 
 # All AI via Vertex AI — uses GCP project + $300 credits
 vertexai.init(project=VERTEX_PROJECT, location=VERTEX_LOCATION)
@@ -200,8 +201,12 @@ def process_chunk(chunk_path: str, source: str, timestamp: str, chunk_index: int
     memory_id_hint = f"{source}_{chunk_index:04d}"
     clip_paths = cut_clips(chunk_path, segments, memory_id_hint) if segments else []
 
-    # Step 3: Extract keyframe + multimodal embed (image + text)
+    # Step 3: Detect + store faces from keyframe
     keyframe_path = extract_keyframe(chunk_path)
+    memory_id_hint_faces = f"{source}_{chunk_index:04d}"
+    _process_faces(keyframe_path, memory_id_hint_faces, timestamp)
+
+    # Step 4: Multimodal embed (image + text)
     if keyframe_path:
         print(f"  Embedding: multimodal (image + text)")
     else:
@@ -227,5 +232,52 @@ def process_chunk(chunk_path: str, source: str, timestamp: str, chunk_index: int
         "embedding": embedding,
     }
 
-    save_memory(memory)
+    saved = save_memory(memory)
+
+    # Link faces to this memory now that we have the memory ID
+    _link_faces_to_memory(source, chunk_index, saved)
+
     return memory
+
+
+def _process_faces(keyframe_path: str | None, memory_id_hint: str, timestamp: str):
+    """Detect faces in keyframe, match against known people or create new entry."""
+    if not keyframe_path or not os.path.exists(keyframe_path):
+        return
+
+    from faces import detect_faces, match_face
+    faces = detect_faces(keyframe_path)
+    if not faces:
+        return
+
+    print(f"  Faces detected: {len(faces)}")
+    known_people = get_all_people()
+
+    for face in faces:
+        match = match_face(face["embedding"], known_people, threshold=0.5)
+        if match:
+            print(f"  Known person: {match.get('name', 'unknown')} (score: {match['match_score']:.2f})")
+            update_person(match["id"], last_seen=timestamp)
+        else:
+            # New person — store with unknown name for now
+            name = f"unknown_{len(known_people) + 1}"
+            save_person({
+                "name": name,
+                "face_embedding": face["embedding"],
+                "face_crop_path": face.get("crop_path", ""),
+                "first_seen": timestamp,
+                "last_seen": timestamp,
+                "memory_ids": []
+            })
+            print(f"  New person saved as: {name}")
+            known_people = get_all_people()  # refresh
+
+
+def _link_faces_to_memory(source: str, chunk_index: int, memory_id: int | None):
+    """Link the memory ID back to people seen in this chunk."""
+    if not memory_id:
+        return
+    people = get_all_people()
+    for person in people:
+        if memory_id not in person["memory_ids"]:
+            update_person(person["id"], memory_id=memory_id)

@@ -17,8 +17,9 @@ from rich.panel import Panel
 from rich import box
 
 from config import VERTEX_PROJECT, VERTEX_LOCATION, GEMINI_FLASH_MODEL
-from storage import init_db, get_all_memories, search_by_embedding, get_stats
+from storage import init_db, get_all_memories, search_by_embedding, get_stats, get_all_people, get_memories_for_person
 from processor import get_embedding
+from faces import detect_faces, match_face
 
 vertexai.init(project=VERTEX_PROJECT, location=VERTEX_LOCATION)
 gemini_model = GenerativeModel(GEMINI_FLASH_MODEL)
@@ -131,6 +132,100 @@ def cmd_stats():
     console.print(table)
 
 
+def cmd_person(image_path: str):
+    """
+    Given a photo, find who this person is and show everything we know about them.
+    Usage: python query.py person photo.jpg
+    """
+    init_db()
+
+    if not os.path.exists(image_path):
+        console.print(f"[red]File not found:[/red] {image_path}")
+        return
+
+    console.print(f"[cyan]Looking up person from:[/cyan] {image_path}")
+
+    # Detect face in query image
+    faces = detect_faces(image_path)
+    if not faces:
+        console.print("[red]No face detected in image.[/red]")
+        return
+
+    console.print(f"[dim]Face detected (confidence: {faces[0]['confidence']:.2f})[/dim]")
+
+    # Match against stored people
+    known_people = get_all_people()
+    if not known_people:
+        console.print("[dim]No people in memory yet.[/dim]")
+        return
+
+    match = match_face(faces[0]["embedding"], known_people, threshold=0.5)
+
+    if not match:
+        console.print("[yellow]Person not recognized. Never seen them before.[/yellow]")
+        return
+
+    # Show person details
+    console.print(Panel(
+        f"[bold]{match.get('name', 'Unknown')}[/bold]\n"
+        f"[dim]Match confidence:[/dim] {match.get('match_score', 0):.0%}\n"
+        f"[dim]First seen:[/dim] {match.get('first_seen', '')[:19]}\n"
+        f"[dim]Last seen:[/dim]  {match.get('last_seen', '')[:19]}",
+        title="Person Found",
+        border_style="green"
+    ))
+
+    # Pull all memories linked to this person
+    memories = get_memories_for_person(match["id"])
+    if not memories:
+        console.print("[dim]No memories linked to this person yet.[/dim]")
+        return
+
+    console.print(f"\n[bold]Everything we know ({len(memories)} memories):[/bold]")
+
+    # Synthesize a summary of what we know about them
+    context = "\n".join([f"- {m['summary']}" for m in memories])
+    prompt = f"""Based on these memories, summarize everything we know about this person concisely.
+Memories:
+{context}
+Give a 3-5 sentence briefing about who this person is."""
+
+    try:
+        response = gemini_model.generate_content(prompt)
+        console.print(Panel(response.text.strip(), title="Briefing", border_style="cyan"))
+    except Exception:
+        pass
+
+    for m in memories:
+        show_memory(m)
+
+
+def cmd_people():
+    """List all people in memory."""
+    init_db()
+    people = get_all_people()
+    if not people:
+        console.print("[dim]No people in memory yet.[/dim]")
+        return
+
+    table = Table(title=f"Known People ({len(people)})", box=box.ROUNDED)
+    table.add_column("ID", width=4)
+    table.add_column("Name")
+    table.add_column("First Seen", width=19)
+    table.add_column("Last Seen", width=19)
+    table.add_column("Memories", width=8)
+
+    for p in people:
+        table.add_row(
+            str(p["id"]),
+            p.get("name", "unknown"),
+            p.get("first_seen", "")[:19],
+            p.get("last_seen", "")[:19],
+            str(len(p.get("memory_ids", [])))
+        )
+    console.print(table)
+
+
 def cmd_chat():
     init_db()
     console.print(Panel(
@@ -168,6 +263,13 @@ def main():
         cmd_timeline()
     elif cmd == "stats":
         cmd_stats()
+    elif cmd == "person":
+        if len(sys.argv) < 3:
+            console.print("Usage: python query.py person <image_path>")
+        else:
+            cmd_person(sys.argv[2])
+    elif cmd == "people":
+        cmd_people()
     else:
         cmd_search(" ".join(sys.argv[1:]), reconstruct=True)
 

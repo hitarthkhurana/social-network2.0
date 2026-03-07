@@ -61,6 +61,12 @@ def show_memory(memory: dict):
 [dim]Activity:[/dim] {memory.get('activity', '—')}  |  [dim]Tags:[/dim] {', '.join(memory.get('tags', [])) or '—'}
 [dim]Clips:[/dim] {len(clips)} saved{f'  → {", ".join(os.path.basename(c) for c in clips)}' if clips else '  (none)'}"""
 
+    if memory.get("scene"):
+        content += f"\n[dim]Scene:[/dim] {memory['scene']}"
+
+    if memory.get("transcript"):
+        content += f"\n[dim]Transcript:[/dim] [italic]{memory['transcript']}[/italic]"
+
     if segments:
         seg_str = "  ".join([f"{s['start']:.0f}s–{s['end']:.0f}s" for s in segments])
         content += f"\n[dim]Segments:[/dim] {seg_str}"
@@ -87,10 +93,14 @@ def cmd_search(query: str, reconstruct: bool = False):
     for m in results:
         show_memory(m)
         if reconstruct and not m.get("keyframe_paths"):
-            console.print("[cyan]  Reconstructing with NanoBanana 2...[/cyan]")
-            path = reconstruct_image(m)
-            if path:
-                console.print(f"  [green]Saved to:[/green] {path}")
+            try:
+                from reconstruct import reconstruct_image
+                console.print("[cyan]  Reconstructing with NanoBanana 2...[/cyan]")
+                path = reconstruct_image(m)
+                if path:
+                    console.print(f"  [green]Saved to:[/green] {path}")
+            except Exception:
+                pass
 
 
 def cmd_timeline():
@@ -132,10 +142,10 @@ def cmd_stats():
     console.print(table)
 
 
-def cmd_person(image_path: str):
+def cmd_person(image_path: str, assign_name: str = None):
     """
     Given a photo, find who this person is and show everything we know about them.
-    Usage: python query.py person photo.jpg
+    Usage: python query.py person photo.jpg [--name 'Alice']
     """
     init_db()
 
@@ -164,6 +174,13 @@ def cmd_person(image_path: str):
     if not match:
         console.print("[yellow]Person not recognized. Never seen them before.[/yellow]")
         return
+
+    # Apply name if provided
+    if assign_name:
+        from storage import update_person
+        update_person(match["id"], name=assign_name)
+        match["name"] = assign_name
+        console.print(f"[green]Named as:[/green] {assign_name}")
 
     # Show person details
     console.print(Panel(
@@ -265,9 +282,15 @@ def main():
         cmd_stats()
     elif cmd == "person":
         if len(sys.argv) < 3:
-            console.print("Usage: python query.py person <image_path>")
+            console.print("Usage: python query.py person <image_path> [--name 'Alice']")
         else:
-            cmd_person(sys.argv[2])
+            # Parse optional --name flag
+            name = None
+            if "--name" in sys.argv:
+                idx = sys.argv.index("--name")
+                if idx + 1 < len(sys.argv):
+                    name = sys.argv[idx + 1]
+            cmd_person(sys.argv[2], assign_name=name)
     elif cmd == "people":
         cmd_people()
     else:

@@ -12,7 +12,7 @@ from config import (
     VERTEX_PROJECT, VERTEX_LOCATION,
     IMPORTANCE_HIGH, CLIPS_DIR, CHUNK_DURATION_SEC
 )
-from storage import save_memory, save_person, update_person, get_all_people
+from storage import save_memory, save_person, update_person, link_person_memory, get_all_people
 from faces import detect_faces, match_face
 
 # All AI via Vertex AI — uses GCP project + $300 credits
@@ -49,29 +49,39 @@ def analyze_chunk(chunk_path: str, source: str, timestamp: str) -> dict:
 
     video_part = Part.from_data(data=video_bytes, mime_type="video/mp4")
 
-    prompt = """Analyze this video segment. Do two things:
+    prompt = """You are analyzing a video segment for a personal memory system. Be thorough.
 
-1. Score overall importance 0.0-1.0:
-   - People speaking, learning, discussion, active work → 0.5-1.0
-   - Static visuals, silence, background, repetitive → 0.0-0.4
+1. SCENE DESCRIPTION — describe everything visible:
+   - Where is this? (room type, setting, environment)
+   - What objects, screens, documents are visible?
+   - What are people doing physically (typing, gesturing, reading)?
+   - What is on any visible screens or whiteboards?
 
-2. Find the exact timestamps of the most important moments within this clip.
-   Only include segments where something meaningful is happening.
-   Each segment should be 3-30 seconds long.
+2. SPEECH TRANSCRIPT — transcribe every word spoken verbatim.
+   Include speaker labels if multiple people (e.g. "Person A: ..., Person B: ...").
+   If silent, use empty string.
 
-Return ONLY valid JSON:
+3. IMPORTANCE SCORE 0.0-1.0:
+   - Active conversation, learning, work, decisions → 0.6-1.0
+   - Someone speaking alone to camera → 0.4-0.6
+   - Idle, browsing, silence, nothing happening → 0.0-0.3
+
+4. IMPORTANT TIMESTAMPS — start/end seconds of meaningful moments.
+   Leave empty if importance < 0.5.
+
+Return ONLY valid JSON — no markdown, no extra text:
 {
   "importance": 0.0,
-  "summary": "2-3 sentence description of the whole chunk",
-  "people": ["people visible or speaking"],
+  "summary": "detailed 3-5 sentence description of the scene and what happened",
+  "scene": "precise description of the physical environment and visible content",
+  "transcript": "verbatim speech with speaker labels, or empty string if silent",
+  "people": ["names or descriptions of everyone visible"],
   "activity": "main activity in one phrase",
-  "tags": ["3-5 relevant tags"],
+  "tags": ["4-6 relevant tags"],
   "important_segments": [
     {"start": 0.0, "end": 0.0, "reason": "why this moment matters"}
   ]
-}
-
-If importance < 0.5, return empty important_segments array."""
+}"""
 
     def _call():
         return gemini_model.generate_content([video_part, prompt])
@@ -135,9 +145,22 @@ def cut_clips(video_path: str, segments: list[dict], memory_id_hint: str) -> lis
 def extract_keyframe(chunk_path: str) -> str | None:
     """Extract a single frame from the middle of the chunk using ffmpeg."""
     keyframe_path = chunk_path.replace(".mp4", "_keyframe.jpg")
+
+    # Get actual duration so we don't seek past the end of short clips
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", chunk_path],
+        capture_output=True, text=True
+    )
+    try:
+        duration = float(probe.stdout.strip())
+    except (ValueError, TypeError):
+        duration = CHUNK_DURATION_SEC
+    seek = min(CHUNK_DURATION_SEC // 2, max(0, duration / 2))
+
     cmd = [
         "ffmpeg", "-y",
-        "-ss", str(CHUNK_DURATION_SEC // 2),  # grab from midpoint
+        "-ss", str(seek),
         "-i", chunk_path,
         "-vframes", "1",
         "-q:v", "2",
@@ -201,27 +224,36 @@ def process_chunk(chunk_path: str, source: str, timestamp: str, chunk_index: int
     memory_id_hint = f"{source}_{chunk_index:04d}"
     clip_paths = cut_clips(chunk_path, segments, memory_id_hint) if segments else []
 
-    # Step 3: Detect + store faces from keyframe
+    # Step 3: Detect + store faces from keyframe, using Gemini's people list for naming
     keyframe_path = extract_keyframe(chunk_path)
-    memory_id_hint_faces = f"{source}_{chunk_index:04d}"
-    _process_faces(keyframe_path, memory_id_hint_faces, timestamp)
+    seen_persons = _process_faces(
+        keyframe_path, f"{source}_{chunk_index:04d}", timestamp,
+        gemini_people=result.get("people", [])
+    )
 
-    # Step 4: Multimodal embed (image + text)
+    # Step 4: Multimodal embed — combine summary + transcript + scene for richer search
+    embed_text = result["summary"]
+    if result.get("transcript"):
+        embed_text += " " + result["transcript"]
+    if result.get("scene"):
+        embed_text += " " + result["scene"]
     if keyframe_path:
-        print(f"  Embedding: multimodal (image + text)")
+        print(f"  Embedding: multimodal (image + text + transcript)")
     else:
-        print(f"  Embedding: text only (no keyframe)")
-    embedding = get_embedding(result["summary"], image_path=keyframe_path)
+        print(f"  Embedding: text only (summary + transcript)")
+    embedding = get_embedding(embed_text, image_path=keyframe_path)
 
     # Cleanup keyframe after embedding
     if keyframe_path and os.path.exists(keyframe_path):
         os.remove(keyframe_path)
 
-    # Step 4: Save memory
+    # Step 5: Save memory
     memory = {
         "timestamp": timestamp,
         "source": source,
         "summary": result["summary"],
+        "scene": result.get("scene", ""),
+        "transcript": result.get("transcript", ""),
         "detail_level": detail_level,
         "people": result.get("people", []),
         "activity": result.get("activity", ""),
@@ -234,50 +266,70 @@ def process_chunk(chunk_path: str, source: str, timestamp: str, chunk_index: int
 
     saved = save_memory(memory)
 
-    # Link faces to this memory now that we have the memory ID
-    _link_faces_to_memory(source, chunk_index, saved)
+    # Link only the faces seen in this chunk to this memory (with confidence scores)
+    _link_faces_to_memory(seen_persons, saved)
 
     return memory
 
 
-def _process_faces(keyframe_path: str | None, memory_id_hint: str, timestamp: str):
-    """Detect faces in keyframe, match against known people or create new entry."""
+def _process_faces(keyframe_path: str | None, memory_id_hint: str, timestamp: str,
+                   gemini_people: list[str] = None) -> list[tuple]:
+    """Detect faces in keyframe, match against known people or create new entry.
+    Uses Gemini's people list to auto-name unknown faces.
+    Returns list of (person_id, confidence) tuples."""
     if not keyframe_path or not os.path.exists(keyframe_path):
-        return
+        return []
 
     from faces import detect_faces, match_face
     faces = detect_faces(keyframe_path)
     if not faces:
-        return
+        return []
 
     print(f"  Faces detected: {len(faces)}")
     known_people = get_all_people()
+    seen_persons = []  # list of (person_id, confidence)
+
+    # Names Gemini identified that haven't been matched to a known face yet
+    unassigned_names = [n for n in (gemini_people or []) if n]
 
     for face in faces:
         match = match_face(face["embedding"], known_people, threshold=0.5)
         if match:
-            print(f"  Known person: {match.get('name', 'unknown')} (score: {match['match_score']:.2f})")
+            matched_name = match.get("name", "")
+            confidence = match["match_score"]
+            # Remove from unassigned if Gemini also mentioned them
+            if matched_name in unassigned_names:
+                unassigned_names.remove(matched_name)
+            # If we knew this face as unknown_N and Gemini now names them → rename
+            if matched_name.startswith("unknown_") and unassigned_names:
+                new_name = unassigned_names.pop(0)
+                update_person(match["id"], name=new_name)
+                print(f"  Renamed {matched_name} → {new_name} (from Gemini context)")
+            else:
+                print(f"  Known person: {matched_name} (score: {confidence:.2f})")
             update_person(match["id"], last_seen=timestamp)
+            seen_persons.append((match["id"], confidence))
         else:
-            # New person — store with unknown name for now
-            name = f"unknown_{len(known_people) + 1}"
-            save_person({
+            # New face — assign next unassigned Gemini name, or fall back to unknown_N
+            name = unassigned_names.pop(0) if unassigned_names else f"unknown_{len(known_people) + 1}"
+            person_id = save_person({
                 "name": name,
                 "face_embedding": face["embedding"],
-                "face_crop_path": face.get("crop_path", ""),
+                "thumbnail_path": face.get("crop_path", ""),
                 "first_seen": timestamp,
                 "last_seen": timestamp,
-                "memory_ids": []
             })
             print(f"  New person saved as: {name}")
+            seen_persons.append((person_id, 1.0))
             known_people = get_all_people()  # refresh
 
+    return seen_persons
 
-def _link_faces_to_memory(source: str, chunk_index: int, memory_id: int | None):
-    """Link the memory ID back to people seen in this chunk."""
-    if not memory_id:
+
+def _link_faces_to_memory(seen_persons: list[tuple], memory_id: int | None):
+    """Link people seen in this chunk to the memory via the join table.
+    seen_persons is a list of (person_id, confidence) tuples."""
+    if not memory_id or not seen_persons:
         return
-    people = get_all_people()
-    for person in people:
-        if memory_id not in person["memory_ids"]:
-            update_person(person["id"], memory_id=memory_id)
+    for person_id, confidence in seen_persons:
+        link_person_memory(person_id, memory_id, confidence)

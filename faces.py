@@ -96,21 +96,32 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 def match_face(query_embedding: np.ndarray, stored_people: list[dict], threshold: float = 0.5) -> dict | None:
     """
     Find the best matching person for a query face embedding.
+    Uses batched matrix multiply instead of a Python loop — O(n) in C, ~100x faster.
     Returns the matched person dict or None if no match above threshold.
     """
-    best_score = -1
-    best_person = None
+    valid = [(i, p) for i, p in enumerate(stored_people) if p.get("face_embedding") is not None]
+    if not valid:
+        return None
 
-    for person in stored_people:
-        emb = person.get("face_embedding")
-        if emb is None:
-            continue
-        score = cosine_similarity(query_embedding, emb)
-        if score > best_score:
-            best_score = score
-            best_person = person
+    indices, people = zip(*valid)
+
+    # Stack all embeddings: shape (N, 512)
+    matrix = np.stack([p["face_embedding"].astype(np.float32) for p in people])
+
+    # Normalize query and matrix rows to unit vectors
+    q = query_embedding.astype(np.float32)
+    q = q / (np.linalg.norm(q) + 1e-10)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True) + 1e-10
+    matrix = matrix / norms
+
+    # Single matrix-vector multiply → all cosine similarities at once
+    scores = matrix @ q  # shape (N,)
+
+    best_idx = int(np.argmax(scores))
+    best_score = float(scores[best_idx])
 
     if best_score >= threshold:
+        best_person = dict(people[best_idx])
         best_person["match_score"] = best_score
         return best_person
     return None

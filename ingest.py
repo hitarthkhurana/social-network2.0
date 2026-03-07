@@ -50,7 +50,19 @@ def get_video_duration(video_path: str) -> float:
          "-of", "default=noprint_wrappers=1:nokey=1", video_path],
         capture_output=True, text=True
     )
-    return float(result.stdout.strip() or 0)
+    val = result.stdout.strip()
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        # Fallback: use OpenCV to count frames
+        import cv2
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 20
+        frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        cap.release()
+        if frames > 0 and fps > 0:
+            return frames / fps
+        return 0.0
 
 
 def split_into_chunks(video_path: str, duration: float) -> list[str]:

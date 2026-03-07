@@ -19,6 +19,8 @@ def init_db():
             timestamp    TEXT NOT NULL,
             source       TEXT,
             summary      TEXT NOT NULL,
+            scene        TEXT,
+            transcript   TEXT,
             detail_level TEXT NOT NULL,
             people       TEXT,
             activity     TEXT,
@@ -30,34 +32,56 @@ def init_db():
         )
     """)
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS people (
+        CREATE TABLE IF NOT EXISTS persons (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             name           TEXT,
             face_embedding BLOB NOT NULL,
-            face_crop_path TEXT,
+            thumbnail_path TEXT,
             first_seen     TEXT,
-            last_seen      TEXT,
-            memory_ids     TEXT
+            last_seen      TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS person_memories (
+            person_id  INTEGER NOT NULL REFERENCES persons(id),
+            memory_id  INTEGER NOT NULL REFERENCES memories(id),
+            confidence REAL,
+            PRIMARY KEY (person_id, memory_id)
+        )
+    """)
+    conn.commit()
+
+    # Migrations — add columns that may be missing from older DB versions
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
+    for col, definition in [
+        ("scene",      "TEXT"),
+        ("transcript", "TEXT"),
+        ("clip_paths", "TEXT"),
+        ("segments",   "TEXT"),
+        ("embedding",  "BLOB"),
+    ]:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE memories ADD COLUMN {col} {definition}")
     conn.commit()
     conn.close()
 
 
-def save_memory(memory: dict):
+def save_memory(memory: dict) -> int:
     conn = sqlite3.connect(DB_PATH)
     embedding = memory.get("embedding")
     embedding_blob = embedding.astype(np.float32).tobytes() if embedding is not None else None
 
     cursor = conn.execute("""
         INSERT INTO memories
-        (timestamp, source, summary, detail_level, people, activity, tags,
+        (timestamp, source, summary, scene, transcript, detail_level, people, activity, tags,
          importance, clip_paths, segments, embedding)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         memory.get("timestamp", datetime.utcnow().isoformat()),
         memory.get("source", ""),
         memory["summary"],
+        memory.get("scene", ""),
+        memory.get("transcript", ""),
         memory.get("detail_level", "low"),
         json.dumps(memory.get("people", [])),
         memory.get("activity", ""),
@@ -74,19 +98,18 @@ def save_memory(memory: dict):
 
 
 def save_person(person: dict) -> int:
-    """Save a new person or update existing. Returns person ID."""
+    """Save a new person. Returns person ID."""
     conn = sqlite3.connect(DB_PATH)
     embedding_blob = person["face_embedding"].astype(np.float32).tobytes()
     cursor = conn.execute("""
-        INSERT INTO people (name, face_embedding, face_crop_path, first_seen, last_seen, memory_ids)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO persons (name, face_embedding, thumbnail_path, first_seen, last_seen)
+        VALUES (?, ?, ?, ?, ?)
     """, (
         person.get("name", "unknown"),
         embedding_blob,
-        person.get("face_crop_path", ""),
+        person.get("thumbnail_path", person.get("face_crop_path", "")),
         person.get("first_seen", datetime.utcnow().isoformat()),
         person.get("last_seen", datetime.utcnow().isoformat()),
-        json.dumps(person.get("memory_ids", [])),
     ))
     person_id = cursor.lastrowid
     conn.commit()
@@ -94,19 +117,24 @@ def save_person(person: dict) -> int:
     return person_id
 
 
-def update_person(person_id: int, name: str = None, memory_id: int = None, last_seen: str = None):
-    """Update person name or add a linked memory."""
+def link_person_memory(person_id: int, memory_id: int, confidence: float = 1.0):
+    """Link a person to a memory with match confidence. Proper join table."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT OR IGNORE INTO person_memories (person_id, memory_id, confidence) VALUES (?, ?, ?)",
+        (person_id, memory_id, confidence),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_person(person_id: int, name: str = None, last_seen: str = None):
+    """Update person name or last_seen timestamp."""
     conn = sqlite3.connect(DB_PATH)
     if name:
-        conn.execute("UPDATE people SET name=? WHERE id=?", (name, person_id))
-    if memory_id:
-        row = conn.execute("SELECT memory_ids FROM people WHERE id=?", (person_id,)).fetchone()
-        ids = json.loads(row[0] or "[]")
-        if memory_id not in ids:
-            ids.append(memory_id)
-        conn.execute("UPDATE people SET memory_ids=? WHERE id=?", (json.dumps(ids), person_id))
+        conn.execute("UPDATE persons SET name=? WHERE id=?", (name, person_id))
     if last_seen:
-        conn.execute("UPDATE people SET last_seen=? WHERE id=?", (last_seen, person_id))
+        conn.execute("UPDATE persons SET last_seen=? WHERE id=?", (last_seen, person_id))
     conn.commit()
     conn.close()
 
@@ -114,32 +142,39 @@ def update_person(person_id: int, name: str = None, memory_id: int = None, last_
 def get_all_people() -> list[dict]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM people ORDER BY last_seen DESC").fetchall()
+    rows = conn.execute("SELECT * FROM persons ORDER BY last_seen DESC").fetchall()
     conn.close()
     result = []
     for r in rows:
         d = dict(r)
         d["face_embedding"] = np.frombuffer(d["face_embedding"], dtype=np.float32)
-        d["memory_ids"] = json.loads(d["memory_ids"] or "[]")
+        # Attach memory_ids for backwards compat
+        d["memory_ids"] = _get_memory_ids_for_person(d["id"])
         result.append(d)
     return result
 
 
-def get_memories_for_person(person_id: int) -> list[dict]:
-    """Get all memories linked to a person."""
+def _get_memory_ids_for_person(person_id: int) -> list[int]:
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    row = conn.execute("SELECT memory_ids FROM people WHERE id=?", (person_id,)).fetchone()
+    rows = conn.execute(
+        "SELECT memory_id FROM person_memories WHERE person_id=? ORDER BY memory_id ASC",
+        (person_id,)
+    ).fetchall()
     conn.close()
-    if not row:
-        return []
-    memory_ids = json.loads(row["memory_ids"] or "[]")
-    if not memory_ids:
-        return []
+    return [r[0] for r in rows]
+
+
+def get_memories_for_person(person_id: int) -> list[dict]:
+    """Get all memories linked to a person via the join table."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    placeholders = ",".join("?" * len(memory_ids))
-    rows = conn.execute(f"SELECT * FROM memories WHERE id IN ({placeholders})", memory_ids).fetchall()
+    rows = conn.execute("""
+        SELECT m.*, pm.confidence
+        FROM memories m
+        JOIN person_memories pm ON m.id = pm.memory_id
+        WHERE pm.person_id = ?
+        ORDER BY m.timestamp ASC
+    """, (person_id,)).fetchall()
     conn.close()
     return [_row_to_dict(r) for r in rows]
 
@@ -178,6 +213,7 @@ def get_stats() -> dict:
     high    = conn.execute("SELECT COUNT(*) FROM memories WHERE importance >= 0.5").fetchone()[0]
     low     = conn.execute("SELECT COUNT(*) FROM memories WHERE importance < 0.5").fetchone()[0]
     avg_imp = conn.execute("SELECT AVG(importance) FROM memories").fetchone()[0] or 0
+    persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     conn.close()
 
     db_size = os.path.getsize(DB_PATH) if os.path.exists(DB_PATH) else 0
@@ -192,6 +228,7 @@ def get_stats() -> dict:
         "high_importance": high,
         "low_importance": low,
         "avg_importance": round(avg_imp, 2),
+        "persons": persons,
         "db_size_kb": round(db_size / 1024, 1),
         "clips_size_kb": round(clips_size / 1024, 1),
     }
@@ -199,10 +236,10 @@ def get_stats() -> dict:
 
 def _row_to_dict(row) -> dict:
     d = dict(row)
-    d["people"]     = json.loads(d["people"] or "[]")
-    d["tags"]       = json.loads(d["tags"] or "[]")
-    d["clip_paths"] = json.loads(d["clip_paths"] or "[]")
-    d["segments"]   = json.loads(d["segments"] or "[]")
-    if d["embedding"]:
+    d["people"]     = json.loads(d.get("people") or "[]")
+    d["tags"]       = json.loads(d.get("tags") or "[]")
+    d["clip_paths"] = json.loads(d.get("clip_paths") or "[]")
+    d["segments"]   = json.loads(d.get("segments") or "[]")
+    if d.get("embedding"):
         d["embedding"] = np.frombuffer(d["embedding"], dtype=np.float32)
     return d

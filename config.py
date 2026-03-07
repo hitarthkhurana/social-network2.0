@@ -1,10 +1,30 @@
 import os
+import subprocess
+
+
+def _get_gcp_project():
+    """Resolve project: env var → gcloud active config → fallback."""
+    p = os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+    if p:
+        return p
+    try:
+        result = subprocess.run(
+            ["gcloud", "config", "get-value", "project"],
+            capture_output=True, text=True, timeout=5
+        )
+        p = result.stdout.strip()
+        if p and p != "(unset)":
+            return p
+    except Exception:
+        pass
+    return "your-gcp-project-id"
+
 
 # Vertex AI — everything runs through GCP project, no AI Studio key needed
-VERTEX_PROJECT  = os.environ.get("GOOGLE_CLOUD_PROJECT", "your-gcp-project-id")
+VERTEX_PROJECT  = _get_gcp_project()
 VERTEX_LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite"   # via Vertex AI
+GEMINI_FLASH_MODEL = "gemini-2.5-flash-lite"   # via Vertex AI
 EMBEDDING_MODEL    = "multimodalembedding@001"  # 1408-dim, image + text
 
 # Importance thresholds

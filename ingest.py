@@ -79,11 +79,15 @@ def split_into_chunks(video_path: str, duration: float) -> list[str]:
 
 
 def process_video(url: str):
-    """Full pipeline: download → split → analyze with Gemini → store."""
+    """Full pipeline: download (or use local file) → split → analyze with Gemini → store."""
     init_db()
 
-    # Download
-    video_path = download_video(url)
+    # Use local file directly if path exists, otherwise download from YouTube
+    if os.path.exists(url):
+        video_path = url
+        console.print(f"[green]Using local file:[/green] {video_path}")
+    else:
+        video_path = download_video(url)
     video_name = Path(video_path).stem
     console.print(f"[green]Downloaded:[/green] {video_path}")
 
@@ -158,8 +162,8 @@ def main():
             urls += [line.strip() for line in f if line.strip()]
 
     if not urls:
-        console.print("[red]No URLs provided.[/red]")
-        console.print("Usage: python ingest.py <youtube_url>")
+        console.print("[red]No input provided.[/red]")
+        console.print("Usage: python ingest.py <youtube_url or /path/to/video.mp4>")
         sys.exit(1)
 
     for url in urls:

@@ -2,8 +2,10 @@ insightface
 onnxruntime
 opencv-python
 numpy
-openai-whisper
 google-genai
 Pillow
 rich
 python-dotenv
+fastapi
+uvicorn
+python-multipart

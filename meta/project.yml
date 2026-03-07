@@ -1,0 +1,30 @@
+name: MetaGlasses
+options:
+  bundleIdPrefix: com.hackathon
+  deploymentTarget:
+    iOS: "15.2"
+  xcodeVersion: "14.0"
+
+packages:
+  meta-wearables-dat-ios:
+    url: https://github.com/facebook/meta-wearables-dat-ios
+    from: "0.4.0"
+
+targets:
+  MetaGlasses:
+    type: application
+    platform: iOS
+    sources:
+      - MetaGlasses
+    info:
+      path: MetaGlasses/Info.plist
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        PRODUCT_BUNDLE_IDENTIFIER: com.hackathon.MetaGlasses
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - package: meta-wearables-dat-ios
+        product: MWDATCore
+      - package: meta-wearables-dat-ios
+        product: MWDATCamera

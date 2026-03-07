@@ -42,7 +42,8 @@ KEYFRAMES_BY_IMPORTANCE = {
 # How many seconds of video to process as one memory chunk
 CHUNK_DURATION_SEC = 60
 
-DB_PATH           = os.path.expanduser("~/.memory-compactor/memories.db")
-CLIPS_DIR         = os.path.expanduser("~/.memory-compactor/clips")
-RECONSTRUCTED_DIR = os.path.expanduser("~/.memory-compactor/reconstructed")
-TEMP_DIR          = os.path.expanduser("~/.memory-compactor/temp")
+DB_PATH             = os.path.expanduser("~/.memory-compactor/memories.db")
+CLIPS_DIR           = os.path.expanduser("~/.memory-compactor/clips")
+RECONSTRUCTED_DIR   = os.path.expanduser("~/.memory-compactor/reconstructed")
+TEMP_DIR            = os.path.expanduser("~/.memory-compactor/temp")
+FACE_THUMBNAILS_DIR = os.path.expanduser("~/.memory-compactor/face_thumbnails")

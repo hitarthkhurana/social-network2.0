@@ -69,6 +69,21 @@ def detect_faces(image_path: str) -> list[dict]:
     return results
 
 
+def crop_face_thumbnail(image_path: str, bbox, output_path: str):
+    """Save a 96x96 face crop — used by server.py enroll endpoint."""
+    img = cv2.imread(image_path)
+    if img is None:
+        return
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    h, w = img.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    crop = img[y1:y2, x1:x2]
+    if crop.size > 0:
+        crop = cv2.resize(crop, (96, 96))
+        cv2.imwrite(output_path, crop)
+
+
 def detect_faces_from_frame(frame: np.ndarray) -> list[dict]:
     """Detect faces directly from a cv2 frame (no file needed)."""
     app = get_face_app()

@@ -234,6 +234,26 @@ def get_stats() -> dict:
     }
 
 
+def find_matching_person(face_embedding: np.ndarray, threshold: float):
+    """Find best matching person. Returns (person_id, confidence) or None."""
+    from faces import match_face
+    people = get_all_people()
+    match = match_face(face_embedding, people, threshold=threshold)
+    if match:
+        return match["id"], match["match_score"]
+    return None
+
+
+def get_all_persons() -> list[dict]:
+    """Alias for get_all_people() — compatibility with server.py."""
+    return get_all_people()
+
+
+def update_person_label(person_id: int, label: str):
+    """Alias for update_person(name=...) — compatibility with server.py."""
+    update_person(person_id, name=label)
+
+
 def _row_to_dict(row) -> dict:
     d = dict(row)
     d["people"]     = json.loads(d.get("people") or "[]")

@@ -6,3 +6,6 @@ onnxruntime
 rich
 numpy
 Pillow
+fastapi
+uvicorn
+python-multipart

@@ -33,11 +33,29 @@ class GlassesManager: ObservableObject {
 
     // MARK: - Registration
 
-    func register() {
+    func register() async {
+        print("🔵 Starting registration...")
+
+        // Check current state first
+        for await state in wearables.registrationStateStream() {
+            print("📱 Current registration state: \(state) (raw: \(state.rawValue))")
+            if state == .registered {
+                print("✅ Already registered! Skipping registration, requesting camera...")
+                isRegistered = true
+                statusMessage = "Already registered"
+                await requestCameraPermission()
+                return
+            }
+            break
+        }
+
         do {
-            try wearables.startRegistration()
+            let result = try await wearables.startRegistration()
             statusMessage = "Opening Meta AI app for registration…"
+            print("✅ Registration result: \(result)")
         } catch {
+            print("❌ Registration error: \(error)")
+            print("❌ Error details: \(String(describing: error))")
             statusMessage = "Registration error: \(error.localizedDescription)"
         }
     }
@@ -47,11 +65,40 @@ class GlassesManager: ObservableObject {
         _ = try await wearables.handleUrl(url)
     }
 
-    func requestCameraPermission() async {
+    func unregister() async {
         do {
+            try await wearables.startUnregistration()
+            isRegistered = false
+            statusMessage = "Unregistered. Tap Connect to re-register."
+            print("✅ Unregistration complete")
+        } catch {
+            print("❌ Unregistration error: \(error)")
+            statusMessage = "Unregistration error: \(error.localizedDescription)"
+        }
+    }
+
+    func requestCameraPermission() async {
+        // First check if we already have permission
+        do {
+            let currentStatus = try await wearables.checkPermissionStatus(.camera)
+            print("📸 Current camera permission status: \(currentStatus)")
+            if currentStatus == .granted {
+                statusMessage = "Camera permission already granted!"
+                return
+            }
+        } catch {
+            print("⚠️ Check permission error: \(error)")
+        }
+
+        // Request permission if not already granted
+        do {
+            print("📸 Requesting camera permission...")
             let status = try await wearables.requestPermission(.camera)
+            print("📸 Camera permission result: \(status)")
             statusMessage = "Camera permission: \(status)"
         } catch {
+            print("❌ Permission request error: \(error)")
+            print("❌ Error details: \(String(describing: error))")
             statusMessage = "Permission error: \(error.localizedDescription)"
         }
     }
@@ -59,13 +106,17 @@ class GlassesManager: ObservableObject {
     // MARK: - Streaming
 
     /// Starts the camera stream if registration has already been completed.
-    func startStreamIfReady() async {
+    func startStreamIfReady() {
         // Observe registration state
         Task {
             for await state in wearables.registrationStateStream() {
+                print("📱 Registration state changed: \(state)")
                 isRegistered = (state == .registered)
                 if isRegistered && !isStreaming {
+                    print("✅ Glasses are registered! Starting stream...")
                     await startStream()
+                } else if !isRegistered {
+                    print("⚠️ Glasses not registered yet. State: \(state)")
                 }
             }
         }

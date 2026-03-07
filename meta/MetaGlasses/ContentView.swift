@@ -36,9 +36,9 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task {
+        .onAppear {
             // Start streaming as soon as the view appears (requires prior registration)
-            await glassesManager.startStreamIfReady()
+            glassesManager.startStreamIfReady()
         }
     }
 
@@ -54,17 +54,39 @@ struct ContentView: View {
             }
             Spacer()
             // Register / connect button
-            if !glassesManager.isRegistered {
-                Button("Connect Glasses") {
-                    glassesManager.register()
+            HStack(spacing: 8) {
+                if !glassesManager.isRegistered {
+                    Button("Connect Glasses") {
+                        Task {
+                            await glassesManager.register()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .controlSize(.small)
+                    
+                    Button("Reset") {
+                        Task {
+                            await glassesManager.unregister()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .controlSize(.small)
+                } else if glassesManager.isRegistered && !glassesManager.isStreaming {
+                    Button("Request Camera") {
+                        Task {
+                            await glassesManager.requestCameraPermission()
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                    .controlSize(.small)
+                } else {
+                    Image(systemName: "glasses")
+                        .foregroundColor(.green)
+                        .font(.title2)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .controlSize(.small)
-            } else {
-                Image(systemName: "glasses")
-                    .foregroundColor(.green)
-                    .font(.title2)
             }
         }
         .padding()

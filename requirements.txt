@@ -1,0 +1,7 @@
+google-generativeai
+yt-dlp
+opencv-python
+openai-whisper
+rich
+numpy
+Pillow

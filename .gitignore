@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pem
+.env
+*.db
+keyframes/
+reconstructed/
+temp/
+*.wav
+*.mp4

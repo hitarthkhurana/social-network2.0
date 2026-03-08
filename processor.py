@@ -75,7 +75,7 @@ Return ONLY valid JSON — no markdown, no extra text:
   "summary": "detailed 3-5 sentence description of the scene and what happened",
   "scene": "precise description of the physical environment and visible content",
   "transcript": "verbatim speech with speaker labels, or empty string if silent",
-  "people": ["names or descriptions of everyone visible"],
+  "people": ["use actual name if mentioned in speech, otherwise describe appearance"],
   "activity": "main activity in one phrase",
   "tags": ["4-6 relevant tags"],
   "important_segments": [
@@ -289,20 +289,32 @@ def _process_faces(keyframe_path: str | None, memory_id_hint: str, timestamp: st
     known_people = get_all_people()
     seen_persons = []  # list of (person_id, confidence)
 
-    # Names Gemini identified that haven't been matched to a known face yet
-    unassigned_names = [n for n in (gemini_people or []) if n]
+    # Names Gemini identified — split into real names vs descriptions
+    all_gemini = [n for n in (gemini_people or []) if n]
+    # A "real name" is short (1-3 words) and not a physical description
+    description_keywords = {"man", "woman", "person", "student", "young", "old", "wearing",
+                             "glasses", "hair", "background", "foreground", "several", "group"}
+    def _is_real_name(s):
+        words = s.lower().split()
+        return len(words) <= 3 and not any(w in description_keywords for w in words)
+
+    real_names    = [n for n in all_gemini if _is_real_name(n)]
+    unassigned_names = list(all_gemini)  # all names available for assignment
 
     for face in faces:
         match = match_face(face["embedding"], known_people, threshold=0.5)
         if match:
             matched_name = match.get("name", "")
             confidence = match["match_score"]
-            # Remove from unassigned if Gemini also mentioned them
+            # Remove from unassigned if Gemini also mentioned this exact name
             if matched_name in unassigned_names:
                 unassigned_names.remove(matched_name)
-            # If we knew this face as unknown_N and Gemini now names them → rename
-            if matched_name.startswith("unknown_") and unassigned_names:
-                new_name = unassigned_names.pop(0)
+            # Rename if: current name is unknown_N or a description, and a real name is available
+            is_placeholder = matched_name.startswith("unknown_") or not _is_real_name(matched_name)
+            if is_placeholder and real_names:
+                new_name = real_names.pop(0)
+                if new_name in unassigned_names:
+                    unassigned_names.remove(new_name)
                 update_person(match["id"], name=new_name)
                 print(f"  Renamed {matched_name} → {new_name} (from Gemini context)")
             else:
@@ -310,8 +322,15 @@ def _process_faces(keyframe_path: str | None, memory_id_hint: str, timestamp: st
             update_person(match["id"], last_seen=timestamp)
             seen_persons.append((match["id"], confidence))
         else:
-            # New face — assign next unassigned Gemini name, or fall back to unknown_N
-            name = unassigned_names.pop(0) if unassigned_names else f"unknown_{len(known_people) + 1}"
+            # New face — prefer a real name, then description, then unknown_N
+            if real_names:
+                name = real_names.pop(0)
+                if name in unassigned_names:
+                    unassigned_names.remove(name)
+            elif unassigned_names:
+                name = unassigned_names.pop(0)
+            else:
+                name = f"unknown_{len(known_people) + 1}"
             person_id = save_person({
                 "name": name,
                 "face_embedding": face["embedding"],

@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Social Network 2.0 — Pitch Deck</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0a;
+    --fg: #f5f5f5;
+    --muted: #a0a0a0;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --card: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .deck {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 6vh 8vw;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 4.5vw, 4.2rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 0.4em;
+    text-align: center;
+  }
+  h2 {
+    font-size: clamp(1.4rem, 2.8vw, 2.6rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin-bottom: 0.6em;
+    text-align: center;
+  }
+  h3 {
+    font-size: clamp(1rem, 1.6vw, 1.5rem);
+    font-weight: 600;
+    margin-bottom: 0.5em;
+  }
+
+  .subtitle {
+    font-size: clamp(1rem, 1.8vw, 1.6rem);
+    color: var(--muted);
+    font-weight: 400;
+    text-align: center;
+    max-width: 42em;
+    line-height: 1.5;
+  }
+
+  .accent-blue { color: var(--blue); }
+  .accent-green { color: var(--green); }
+
+  .tag {
+    display: inline-block;
+    padding: 0.3em 1em;
+    border-radius: 100px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 1.2em;
+    background: rgba(59,130,246,0.12);
+    color: var(--blue);
+    border: 1px solid rgba(59,130,246,0.2);
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.6rem;
+    width: 100%;
+    max-width: 960px;
+    margin-top: 1.5rem;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 1.8rem;
+    text-align: center;
+  }
+  .stat-card .number {
+    font-size: clamp(1.6rem, 3vw, 2.8rem);
+    font-weight: 800;
+    color: var(--blue);
+    margin-bottom: 0.3em;
+  }
+  .stat-card p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    width: 100%;
+    max-width: 960px;
+    margin-top: 1.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+  }
+
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 0.6em;
+  }
+
+  .card p, .card li {
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+  .card li { margin-bottom: 0.3em; }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 960px;
+    margin-top: 1.5rem;
+  }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+  .step .icon {
+    font-size: 2.4rem;
+    margin-bottom: 0.5em;
+  }
+  .step .label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    font-weight: 600;
+    margin-bottom: 0.6em;
+  }
+  .step p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 1.5rem 0;
+    font-size: clamp(0.8rem, 1.2vw, 1rem);
+    font-weight: 600;
+  }
+  .flow-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.6em 1.2em;
+  }
+  .flow-arrow { color: var(--blue); font-size: 1.2em; }
+
+  .bullet-list {
+    list-style: none;
+    max-width: 720px;
+    width: 100%;
+  }
+  .bullet-list li {
+    padding: 0.7em 0;
+    font-size: clamp(0.9rem, 1.3vw, 1.15rem);
+    color: var(--muted);
+    line-height: 1.6;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8em;
+  }
+  .bullet-list li::before {
+    content: '';
+    flex-shrink: 0;
+    width: 8px; height: 8px;
+    background: var(--blue);
+    border-radius: 50%;
+    margin-top: 0.55em;
+  }
+  .bullet-list.green li::before { background: var(--green); }
+
+  .tiers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 960px;
+    margin-top: 1.5rem;
+  }
+  .tier {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+  .tier.featured {
+    border-color: var(--blue);
+    background: rgba(59,130,246,0.05);
+  }
+  .tier .price {
+    font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+    font-weight: 800;
+    margin: 0.3em 0;
+  }
+  .tier .plan {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    font-weight: 600;
+  }
+  .tier ul {
+    list-style: none;
+    margin-top: 1em;
+    text-align: left;
+  }
+  .tier ul li {
+    color: var(--muted);
+    font-size: 0.85rem;
+    padding: 0.35em 0;
+    line-height: 1.5;
+  }
+  .tier ul li::before {
+    content: '\2713';
+    color: var(--green);
+    margin-right: 0.6em;
+    font-weight: 700;
+  }
+
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 960px;
+    margin-top: 1.5rem;
+  }
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.8rem 1.2rem;
+    text-align: center;
+  }
+  .metric .val {
+    font-size: clamp(1.4rem, 2.5vw, 2.2rem);
+    font-weight: 800;
+    color: var(--green);
+  }
+  .metric .desc {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 0.4em;
+    line-height: 1.4;
+  }
+
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 960px;
+    margin-top: 1.5rem;
+  }
+  .why-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.8rem;
+  }
+  .why-card .num {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--blue);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.5em;
+  }
+  .why-card h3 { font-size: 1.05rem; margin-bottom: 0.3em; }
+  .why-card p { color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+
+  .tech-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 800px;
+    margin-top: 1.5rem;
+  }
+  .tech-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem 1.8rem;
+  }
+  .tech-item .layer {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--blue);
+    font-weight: 600;
+    margin-bottom: 0.4em;
+  }
+  .tech-item p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .ask-items {
+    max-width: 640px;
+    width: 100%;
+    margin-top: 1.5rem;
+  }
+  .ask-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .ask-item:last-child { border-bottom: none; }
+  .ask-item .timeline {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--green);
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.2);
+    padding: 0.25em 0.8em;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .ask-item p {
+    font-size: 1.05rem;
+    color: var(--muted);
+  }
+
+  .big-quote {
+    font-size: clamp(1.3rem, 2.6vw, 2.4rem);
+    font-weight: 700;
+    line-height: 1.35;
+    text-align: center;
+    max-width: 800px;
+    margin-bottom: 0.6em;
+    letter-spacing: -0.02em;
+  }
+
+  .bottom-text {
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .bottom-tagline {
+    margin-top: 2.5rem;
+    font-size: clamp(1rem, 1.4vw, 1.2rem);
+    color: var(--muted);
+    text-align: center;
+    font-weight: 500;
+  }
+
+  /* Progress bar */
+  .progress {
+    position: fixed;
+    bottom: 0; left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--blue), var(--green));
+    transition: width 0.4s ease;
+    z-index: 100;
+  }
+
+  /* Slide counter */
+  .counter {
+    position: fixed;
+    bottom: 1.2rem;
+    right: 1.5rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 500;
+    z-index: 100;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Navigation hint */
+  .nav-hint {
+    position: fixed;
+    bottom: 1.2rem;
+    left: 1.5rem;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.2);
+    z-index: 100;
+  }
+
+  .expansion-note {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+    text-align: center;
+    font-style: italic;
+  }
+
+  @media (max-width: 768px) {
+    .slide { padding: 4vh 6vw; }
+    .stat-grid, .steps, .tiers, .metric-row, .why-grid, .tech-grid, .two-col {
+      grid-template-columns: 1fr;
+    }
+    .flow { font-size: 0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- Slide 1: Title -->
+  <div class="slide active" data-index="0">
+    <div class="tag">Y Combinator S26</div>
+    <h1>Social Network <span class="accent-blue">2.0</span></h1>
+    <p class="subtitle" style="font-size:clamp(1.1rem,2vw,1.7rem); margin-bottom:0.8em;">"The AI that remembers every person you've ever met"</p>
+    <p class="subtitle" style="font-size:clamp(0.85rem,1.2vw,1rem); color:var(--muted);">Built with Smart Glasses + AI</p>
+  </div>
+
+  <!-- Slide 2: Problem -->
+  <div class="slide" data-index="1">
+    <h2>You remember faces.<br>You forget <span class="accent-blue">everything else.</span></h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="number">83%</div>
+        <p>of professionals forget someone's name mid-conversation</p>
+      </div>
+      <div class="stat-card">
+        <div class="number">10,000+</div>
+        <p>people the average person meets in their lifetime</p>
+      </div>
+      <div class="stat-card">
+        <div class="number">0</div>
+        <p>CRMs track customers. Nothing tracks the humans in your actual life.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 3: Solution -->
+  <div class="slide" data-index="2">
+    <h2>Smart glasses that <span class="accent-green">whisper context</span><br>about anyone you see.</h2>
+    <div class="two-col" style="margin-top:2rem;">
+      <div class="card">
+        <div class="card-icon">&#x1F441;</div>
+        <h3>Recognize</h3>
+        <p>Look at someone &rarr; hear their name and how you know them. <strong style="color:var(--green);">In 3 seconds. Hands-free.</strong></p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#x1F5E3;</div>
+        <h3>Remember</h3>
+        <p>Meet someone new &rarr; just say their name. The system <strong style="color:var(--blue);">remembers forever.</strong></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 4: Demo -->
+  <div class="slide" data-index="3">
+    <h2>See it in <span class="accent-blue">action</span></h2>
+    <div class="steps">
+      <div class="step">
+        <div class="icon">&#x1F576;</div>
+        <div class="label">Step 1</div>
+        <h3>Wear</h3>
+        <p>Put on Smart glasses</p>
+      </div>
+      <div class="step">
+        <div class="icon">&#x1F50D;</div>
+        <div class="label">Step 2</div>
+        <h3>Recognize</h3>
+        <p>"That's Sarah. Met at AI meetup. Building health tech."</p>
+      </div>
+      <div class="step">
+        <div class="icon">&#x1F4BE;</div>
+        <div class="label">Step 3</div>
+        <h3>Remember</h3>
+        <p>Meet someone new &rarr; say their name &rarr; remembered forever</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 5: How It Works -->
+  <div class="slide" data-index="4">
+    <h2>Architecture</h2>
+    <div class="flow">
+      <span class="flow-box">&#x1F576; Glasses Camera</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-box">&#x1F4F1; Phone (DAT SDK)</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-box">&#x1F9E0; AI Backend (&lt;3 sec)</span>
+      <span class="flow-arrow">&rarr;</span>
+      <span class="flow-box">&#x1F50A; Glasses Speakers</span>
+    </div>
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-card">
+        <div class="number" style="font-size:1.5rem;">&#x1F441;</div>
+        <h3 style="margin:0.3em 0;">See</h3>
+        <p>Smart stream live video</p>
+      </div>
+      <div class="stat-card">
+        <div class="number" style="font-size:1.5rem;">&#x1F9EC;</div>
+        <h3 style="margin:0.3em 0;">Recognize</h3>
+        <p>InsightFace matching (512-dim embeddings)</p>
+      </div>
+      <div class="stat-card">
+        <div class="number" style="font-size:1.5rem;">&#x1F4A1;</div>
+        <h3 style="margin:0.3em 0;">Recall</h3>
+        <p>Gemini synthesizes history</p>
+      </div>
+      <div class="stat-card">
+        <div class="number" style="font-size:1.5rem;">&#x1F399;</div>
+        <h3 style="margin:0.3em 0;">Speak</h3>
+        <p>Real-time audio through glasses</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 6: Market -->
+  <div class="slide" data-index="5">
+    <div class="tag">Market Opportunity</div>
+    <h1>TAM: <span class="accent-green">$47B</span></h1>
+    <p class="subtitle" style="margin-bottom:1.5rem;">Wearable AI + Personal Knowledge Management</p>
+    <ul class="bullet-list green">
+      <li><strong style="color:var(--fg);">10M+</strong> AI smart glasses sold</li>
+      <li>Smart glasses market growing <strong style="color:var(--fg);">30% YoY</strong></li>
+      <li>Every professional, networker, salesperson</li>
+      <li><strong style="color:var(--fg);">2.5%</strong> of population has prosopagnosia (face blindness)</li>
+    </ul>
+    <p class="bottom-text">"We're building the contact list for the real world."</p>
+  </div>
+
+  <!-- Slide 7: Business Model -->
+  <div class="slide" data-index="6">
+    <h2>Business Model</h2>
+    <div class="tiers">
+      <div class="tier">
+        <div class="plan">Free</div>
+        <div class="price">$0</div>
+        <ul>
+          <li>50 people in memory</li>
+          <li>Basic recognition</li>
+          <li>Name recall</li>
+        </ul>
+      </div>
+      <div class="tier featured">
+        <div class="plan">Pro</div>
+        <div class="price">$9.99<span style="font-size:0.5em;font-weight:400;color:var(--muted);">/mo</span></div>
+        <ul>
+          <li>Unlimited people</li>
+          <li>Conversation history</li>
+          <li>Relationship insights</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <div class="plan">Enterprise</div>
+        <div class="price">$29<span style="font-size:0.5em;font-weight:400;color:var(--muted);">/seat/mo</span></div>
+        <ul>
+          <li>Team sharing</li>
+          <li>CRM integrations</li>
+          <li>Meeting prep</li>
+        </ul>
+      </div>
+    </div>
+    <p class="expansion-note">Expansion: Personal AI memory layer beyond faces</p>
+  </div>
+
+  <!-- Slide 8: Traction -->
+  <div class="slide" data-index="7">
+    <div class="tag">Early Traction</div>
+    <h2>Built &amp; Working</h2>
+    <div class="metric-row">
+      <div class="metric">
+        <div class="val">24 hrs</div>
+        <div class="desc">Built end-to-end</div>
+      </div>
+      <div class="metric">
+        <div class="val">Live</div>
+        <div class="desc">Working hardware integration with Smart</div>
+      </div>
+      <div class="metric">
+        <div class="val">&lt;3 sec</div>
+        <div class="desc">Recognition latency</div>
+      </div>
+      <div class="metric">
+        <div class="val">99.2%</div>
+        <div class="desc">Face recognition accuracy</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 9: Why Now -->
+  <div class="slide" data-index="8">
+    <h2>Why <span class="accent-blue">Now</span></h2>
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="num">01</div>
+        <h3>Wearables DAT SDK just launched</h3>
+        <p>Oct 2025 — third-party camera access is brand new</p>
+      </div>
+      <div class="why-card">
+        <div class="num">02</div>
+        <h3>Multimodal AI hit real-time speeds</h3>
+        <p>Gemini Flash &lt;2 sec inference</p>
+      </div>
+      <div class="why-card">
+        <div class="num">03</div>
+        <h3>Smart glasses crossed mainstream</h3>
+        <p>Fashion-forward, not face computers</p>
+      </div>
+      <div class="why-card">
+        <div class="num">04</div>
+        <h3>Privacy-first</h3>
+        <p>Data stays on your device</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 10: Tech Stack -->
+  <div class="slide" data-index="9">
+    <h2>Tech Stack</h2>
+    <div class="tech-grid">
+      <div class="tech-item">
+        <div class="layer">Hardware</div>
+        <p>Smart Smart Glasses</p>
+      </div>
+      <div class="tech-item">
+        <div class="layer">Mobile</div>
+        <p>Swift / SwiftUI + Wearables DAT SDK</p>
+      </div>
+      <div class="tech-item">
+        <div class="layer">Backend</div>
+        <p>FastAPI + InsightFace + Gemini 2.0 Flash</p>
+      </div>
+      <div class="tech-item">
+        <div class="layer">Storage</div>
+        <p>SQLite + 512-dim face embeddings + 768-dim text embeddings</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 11: The Ask -->
+  <div class="slide" data-index="10">
+    <div class="tag">The Ask</div>
+    <h1>Raising <span class="accent-green">$1.5M</span> Seed</h1>
+    <div class="ask-items">
+      <div class="ask-item">
+        <span class="timeline">Q2</span>
+        <p>Ship iOS app to App Store</p>
+      </div>
+      <div class="ask-item">
+        <span class="timeline">Q3</span>
+        <p>Android + more glasses platforms</p>
+      </div>
+      <div class="ask-item">
+        <span class="timeline">Q4+</span>
+        <p>Build the relationship graph</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 12: Closing -->
+  <div class="slide" data-index="11">
+    <p class="big-quote"><span class="accent-blue">Google Photos</span> indexes your life by faces.</p>
+    <p class="big-quote">We index your life by <span class="accent-green">relationships</span> —<br>live, through your glasses.</p>
+    <p class="bottom-tagline">Social Network 2.0 — <strong>Never forget a face.</strong></p>
+  </div>
+
+</div>
+
+<div class="progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+<div class="nav-hint">&#8592; &#8594; Arrow keys to navigate</div>
+
+<script>
+(function() {
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+
+  function go(index) {
+    if (index < 0 || index >= total) return;
+    slides[current].classList.remove('active');
+    current = index;
+    slides[current].classList.add('active');
+    document.getElementById('progress').style.width = ((current + 1) / total * 100) + '%';
+    document.getElementById('counter').textContent = (current + 1) + ' / ' + total;
+  }
+
+  go(0);
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); go(current + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); go(current - 1); }
+    if (e.key === 'Home') { e.preventDefault(); go(0); }
+    if (e.key === 'End') { e.preventDefault(); go(total - 1); }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', function(e) { touchStartX = e.changedTouches[0].screenX; });
+  document.addEventListener('touchend', function(e) {
+    const dx = e.changedTouches[0].screenX - touchStartX;
+    if (dx < -50) go(current + 1);
+    if (dx > 50) go(current - 1);
+  });
+})();
+</script>
+</body>
+</html>

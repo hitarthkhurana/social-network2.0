@@ -52,8 +52,22 @@ def record(seconds: int = None) -> str:
     # Write to a temp .avi first (OpenCV codec support is more reliable),
     # then convert to .mp4 with ffmpeg for Gemini compatibility.
     tmp_path = out_path.replace(".mp4", "_raw.avi")
+    audio_path = out_path.replace(".mp4", "_audio.m4a")
     fourcc = cv2.VideoWriter_fourcc(*"MJPG")
     writer = cv2.VideoWriter(tmp_path, fourcc, fps, (width, height))
+
+    # Start mic recording in background via ffmpeg avfoundation
+    audio_proc = None
+    try:
+        audio_proc = subprocess.Popen(
+            ["ffmpeg", "-y", "-f", "avfoundation", "-i", ":0",
+             "-c:a", "aac", "-b:a", "128k", audio_path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        console.print("[dim]Microphone recording started.[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]Could not start mic: {e}[/yellow]")
 
     if seconds:
         console.print(f"[cyan]Recording for {seconds} seconds...[/cyan] (press Q to stop early)")
@@ -87,6 +101,11 @@ def record(seconds: int = None) -> str:
     writer.release()
     cv2.destroyAllWindows()
 
+    # Stop mic recording
+    if audio_proc and audio_proc.poll() is None:
+        audio_proc.terminate()
+        audio_proc.wait(timeout=5)
+
     duration = time.time() - start
 
     if frames == 0:
@@ -95,18 +114,34 @@ def record(seconds: int = None) -> str:
             "On Mac: System Settings → Privacy & Security → Camera → enable for Terminal/iTerm2"
         )
 
-    # Convert AVI → MP4 for Gemini compatibility
+    # Mux video + audio (or just convert video if no audio captured)
     console.print("[cyan]Converting to MP4...[/cyan]")
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-i", tmp_path, "-c:v", "libx264", "-preset", "fast", "-c:a", "aac", out_path],
-        capture_output=True
-    )
+    has_audio = os.path.exists(audio_path) and os.path.getsize(audio_path) > 1024
+
+    if has_audio:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_path, "-i", audio_path,
+             "-c:v", "libx264", "-preset", "fast",
+             "-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0",
+             "-shortest", out_path],
+            capture_output=True
+        )
+    else:
+        console.print("[yellow]No audio captured — saving video only.[/yellow]")
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_path, "-c:v", "libx264", "-preset", "fast", out_path],
+            capture_output=True
+        )
+
     os.remove(tmp_path)
+    if os.path.exists(audio_path):
+        os.remove(audio_path)
 
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg conversion failed: {result.stderr.decode()}")
 
-    console.print(f"[green]Recorded {duration:.1f}s ({frames} frames) → {out_path}[/green]")
+    audio_status = "video+audio" if has_audio else "video only"
+    console.print(f"[green]Recorded {duration:.1f}s ({frames} frames, {audio_status}) → {out_path}[/green]")
     return out_path
 
 

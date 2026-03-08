@@ -66,12 +66,29 @@ def match_or_create_person(image_path: str, face_data: dict) -> tuple:
 
 
 def detect_and_resolve_persons(app, frame_paths: list) -> list:
-    """Returns list of (person_id, confidence, is_new)."""
-    seen_persons = {}
+    """Detect faces and resolve to persons. Only links the largest (primary) face per frame.
+    Still registers all faces in the store, but returns only the primary for memory linking.
+    Returns list of (person_id, confidence, is_new)."""
+    primary_persons = {}
+    all_detected = []
+
     for frame_path in frame_paths:
         faces = detect_faces(app, frame_path)
+        if not faces:
+            continue
+
+        # Find the largest face (most likely the speaker / main subject)
+        largest = max(faces, key=lambda f: (f["bbox"][2] - f["bbox"][0]) * (f["bbox"][3] - f["bbox"][1]))
+
+        # Register all faces in the store (so we recognize them later)
         for face_data in faces:
             person_id, confidence, is_new = match_or_create_person(frame_path, face_data)
-            if person_id not in seen_persons or confidence > seen_persons[person_id][0]:
-                seen_persons[person_id] = (confidence, is_new)
-    return [(pid, conf, is_new) for pid, (conf, is_new) in seen_persons.items()]
+            all_detected.append((person_id, confidence, is_new))
+
+        # But only link the primary face to the memory
+        primary_id, primary_conf, primary_new = match_or_create_person(frame_path, largest)
+        if primary_id not in primary_persons or primary_conf > primary_persons[primary_id][0]:
+            primary_persons[primary_id] = (primary_conf, primary_new)
+
+    # Print all detected for logging but return only primary
+    return [(pid, conf, is_new) for pid, (conf, is_new) in primary_persons.items()], all_detected

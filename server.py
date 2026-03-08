@@ -19,6 +19,8 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from config import GEMINI_API_KEY, FACE_MATCH_THRESHOLD, TEMP_DIR
@@ -49,6 +51,51 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/app", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+
+
+def _has_real_speech(transcript):
+    if not transcript:
+        return False
+    return transcript.strip().lower() not in {"no speech detected.", "no speech detected", ""}
+
+
+@app.get("/api/persons")
+async def api_persons():
+    """Return all persons with their memories (only those with real speech)."""
+    persons = get_all_persons()
+    result = []
+    for p in persons:
+        memories = get_memories_for_person(p["id"])
+        # Only include memories that have real speech
+        meaningful = [
+            {
+                "summary": m.get("summary", ""),
+                "transcript": m.get("transcript", ""),
+                "source": m.get("source", ""),
+                "timestamp": m.get("timestamp", ""),
+                "importance": m.get("importance", 0),
+                "tags": m.get("tags", []),
+                "activity": m.get("activity", ""),
+            }
+            for m in memories
+            if _has_real_speech(m.get("transcript"))
+        ]
+        # Only show persons who have at least one meaningful memory
+        if not meaningful:
+            continue
+        result.append({
+            "id": p["id"],
+            "name": p.get("label") or None,
+            "thumbnail": p.get("thumbnail_path"),
+            "created_at": p.get("created_at"),
+            "memories": meaningful,
+        })
+    return JSONResponse(result)
 
 
 @app.post("/identify")

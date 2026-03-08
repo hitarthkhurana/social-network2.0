@@ -135,8 +135,41 @@ def save_keyframes(frames: list, memory_id_hint: str, count: int) -> list:
     return saved_paths
 
 
+def has_real_speech(transcript: str) -> bool:
+    """Check if transcript contains meaningful speech."""
+    if not transcript:
+        return False
+    skip = {"no speech detected.", "no speech detected", ""}
+    return transcript.strip().lower() not in skip
+
+
 def process_chunk(frames: list, transcript: str, source: str, timestamp: str, chunk_index: int, face_app):
     print(f"\n  Chunk {chunk_index}: {len(frames)} frames, transcript: {len(transcript)} chars")
+
+    # Step 2.5: Face detection on ALL frames (always detect faces for recognition)
+    person_links, all_detected = detect_and_resolve_persons(face_app, frames)
+    print(f"  Faces detected: {len(all_detected)}, Primary persons: {len(person_links)}")
+
+    for person_id, confidence, is_new in all_detected:
+        label = get_person_label(person_id)
+        is_primary = any(pid == person_id for pid, _, _ in person_links)
+        marker = " (primary)" if is_primary else " (background)"
+        if is_new:
+            print(f"    NEW{marker}: {label} — adding to store")
+        else:
+            print(f"    RECOGNIZED{marker}: {label} (similarity: {confidence:.4f})")
+            if is_primary:
+                existing_memories = get_memories_for_person(person_id)
+                if existing_memories:
+                    print(f"    Existing context ({len(existing_memories)} memories):")
+                    for m in existing_memories:
+                        if m.get("transcript") and has_real_speech(m["transcript"]):
+                            print(f"      - [{m['source']}] {m['transcript'][:80]}")
+
+    # Skip storing memory if no real speech
+    if not has_real_speech(transcript):
+        print(f"  No meaningful speech — skipping memory storage")
+        return None
 
     # Step 1: Gemini — score + summarize
     result = analyze_chunk(frames, transcript, source, timestamp)
@@ -151,24 +184,6 @@ def process_chunk(frames: list, transcript: str, source: str, timestamp: str, ch
     memory_id_hint = f"{source}_{chunk_index:04d}"
     keyframe_paths = save_keyframes(frames, memory_id_hint, keyframe_count)
     print(f"  Keyframes stored: {len(keyframe_paths)}")
-
-    # Step 2.5: Face detection on ALL frames
-    person_links = detect_and_resolve_persons(face_app, frames)
-    print(f"  Persons detected: {len(person_links)}")
-
-    for person_id, confidence, is_new in person_links:
-        label = get_person_label(person_id)
-        if is_new:
-            print(f"    NEW person: {label} — adding to store")
-        else:
-            print(f"    RECOGNIZED: {label} (similarity: {confidence:.4f})")
-            existing_memories = get_memories_for_person(person_id)
-            if existing_memories:
-                print(f"    Existing context ({len(existing_memories)} memories):")
-                for m in existing_memories:
-                    print(f"      - [{m['source']}] {m['summary'][:60]}")
-                    if m.get("transcript"):
-                        print(f"        Transcript: {m['transcript'][:80]}")
 
     # Step 3: Embed summary text
     embedding = get_embedding(result["summary"])

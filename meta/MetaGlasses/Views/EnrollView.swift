@@ -12,8 +12,8 @@ struct EnrollView: View {
     @SwiftUI.State private var state: State = .idle
     @SwiftUI.State private var elapsedSeconds = 0
     @SwiftUI.State private var recordingTimer: Timer?
+    @SwiftUI.State private var recorder = VideoRecorder()
 
-    private let recorder = VideoRecorder()
     private let maxRecordingSeconds = 20
 
     var body: some View {
@@ -126,16 +126,20 @@ struct EnrollView: View {
     // MARK: - Actions
 
     private func startRecording() async {
+        print("🎬 Enroll: starting recording...")
         do {
             try recorder.startRecording()
+            print("✅ Enroll: recording started")
         } catch {
+            print("❌ Enroll: start recording failed: \(error)")
             state = .error("Could not start recording: \(error.localizedDescription)")
             return
         }
 
         // Forward each glasses frame into the recorder
-        glassesManager.onVideoFrame = { [weak recorder] image in
-            recorder?.appendFrame(image)
+        glassesManager.onVideoFrame = { [recorder] image in
+            print("🎬 Frame received: \(image.size)")
+            recorder.appendFrame(image)
         }
 
         state = .recording
@@ -157,24 +161,31 @@ struct EnrollView: View {
         recordingTimer = nil
         glassesManager.onVideoFrame = nil
 
+        print("🎬 Enroll: stopping recording...")
         state = .uploading
 
-        guard let videoURL = await recorder.stopRecording() else {
+        let (videoURL, audioURL) = await recorder.stopRecording()
+        guard let videoURL else {
+            print("❌ Enroll: no video output")
             state = .error("Recording produced no output.")
             return
         }
 
+        print("🎬 Enroll: uploading video=\(videoURL.lastPathComponent) audio=\(audioURL?.lastPathComponent ?? "merged")")
         do {
-            let result = try await BackendClient.shared.enroll(videoURL: videoURL)
+            let result = try await BackendClient.shared.enroll(videoURL: videoURL, audioURL: audioURL)
+            print("✅ Enroll: status=\(result.status) name=\(result.name ?? "nil")")
             let name = result.name ?? "Person"
             state = .success(name)
             SpeechOutput.shared.speak("\(name) has been saved.")
         } catch {
+            print("❌ Enroll: \(error)")
             state = .error("Upload failed: \(error.localizedDescription)")
         }
 
-        // Clean up temp file
+        // Clean up temp files
         try? FileManager.default.removeItem(at: videoURL)
+        if let audioURL { try? FileManager.default.removeItem(at: audioURL) }
     }
 
     // MARK: - Helpers

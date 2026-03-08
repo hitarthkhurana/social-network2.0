@@ -50,12 +50,18 @@ class VideoRecorder {
     // MARK: - Append video frame (called from GlassesManager.onVideoFrame)
 
     func appendFrame(_ image: UIImage) {
+        guard isRecording else {
+            print("⚠️ VideoRecorder: not recording, ignoring frame")
+            return
+        }
         guard
-            isRecording,
             let adaptor = pixelBufferAdaptor,
             let vInput = videoInput,
             vInput.isReadyForMoreMediaData
-        else { return }
+        else {
+            print("⚠️ VideoRecorder: writer not ready")
+            return
+        }
 
         guard let pixelBuffer = image.toCVPixelBuffer(width: videoWidth, height: videoHeight)
         else { return }
@@ -66,13 +72,21 @@ class VideoRecorder {
 
         adaptor.append(pixelBuffer, withPresentationTime: pts)
         frameCount += 1
+        if frameCount % 7 == 0 {
+            print("🎬 VideoRecorder: \(frameCount) frames written")
+        }
     }
 
     // MARK: - Stop
 
-    /// Stops recording, merges video + audio, returns the final .mp4 URL.
-    func stopRecording() async -> URL? {
-        guard isRecording else { return nil }
+    /// Stops recording, merges video + audio, returns (mergedURL, nil) on success
+    /// or (videoURL, audioURL) if merge fails so both can be sent separately.
+    func stopRecording() async -> (video: URL?, audio: URL?) {
+        guard isRecording else {
+            print("⚠️ VideoRecorder: stopRecording called but not recording")
+            return (nil, nil)
+        }
+        print("🎬 VideoRecorder: stopping after \(frameCount) frames")
         isRecording = false
 
         audioRecorder?.stop()
@@ -81,15 +95,15 @@ class VideoRecorder {
         videoInput?.markAsFinished()
         await assetWriter?.finishWriting()
 
-        guard let vURL = videoURL, let aURL = audioURL else { return nil }
+        guard let vURL = videoURL, let aURL = audioURL else { return (nil, nil) }
 
         let outputURL = tempURL(extension: "mp4")
         do {
             try await mergeVideoAndAudio(videoURL: vURL, audioURL: aURL, outputURL: outputURL)
-            return outputURL
+            return (outputURL, nil)
         } catch {
-            print("Merge failed: \(error) — returning video-only file")
-            return vURL
+            print("Merge failed: \(error) — sending video and audio separately")
+            return (vURL, aURL)
         }
     }
 

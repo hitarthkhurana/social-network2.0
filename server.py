@@ -114,12 +114,19 @@ async def identify(request: Request):
 
 
 @app.post("/enroll")
-async def enroll(video: UploadFile = File(...)):
-    """Receive MP4 video, extract face + transcribe audio, store."""
+async def enroll(video: UploadFile = File(...), audio: UploadFile = File(None)):
+    """Receive MP4 video (+ optional separate audio), extract face + transcribe, store."""
     # Save uploaded video to temp file
     tmp_video = os.path.join(TEMP_DIR, f"enroll_{video.filename}")
     with open(tmp_video, "wb") as f:
         f.write(await video.read())
+
+    # Save separate audio file if provided (when video/audio merge failed on iOS)
+    tmp_separate_audio = None
+    if audio is not None:
+        tmp_separate_audio = os.path.join(TEMP_DIR, f"enroll_{audio.filename}")
+        with open(tmp_separate_audio, "wb") as f:
+            f.write(await audio.read())
 
     try:
         # Step 1: Extract a frame for face detection
@@ -156,8 +163,10 @@ async def enroll(video: UploadFile = File(...)):
 
         # Step 2: Extract audio and transcribe with Gemini
         audio_path = os.path.join(TEMP_DIR, "enroll_audio.wav")
+        # Use separate audio file if provided, otherwise extract from video
+        audio_source = tmp_separate_audio or tmp_video
         subprocess.run(
-            ["ffmpeg", "-y", "-i", tmp_video, "-ac", "1", "-ar", "8000", audio_path],
+            ["ffmpeg", "-y", "-i", audio_source, "-ac", "1", "-ar", "8000", audio_path],
             capture_output=True,
         )
 
@@ -232,7 +241,7 @@ async def enroll(video: UploadFile = File(...)):
         link_person_memory(person_id, memory_id, 1.0)
 
         # Cleanup
-        for f in [tmp_video, audio_path, best_frame_path]:
+        for f in [tmp_video, audio_path, best_frame_path, tmp_separate_audio]:
             if f and os.path.exists(f):
                 try:
                     os.remove(f)

@@ -74,18 +74,23 @@ struct ContentView: View {
                     .tint(.red)
                     .controlSize(.small)
                 } else if glassesManager.isRegistered && !glassesManager.isStreaming {
-                    Button("Request Camera") {
+                    Button("Start") {
                         Task {
-                            await glassesManager.requestCameraPermission()
+                            await glassesManager.startStream()
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
                     .controlSize(.small)
                 } else {
-                    Image(systemName: "glasses")
-                        .foregroundColor(.green)
-                        .font(.title2)
+                    Button("Stop") {
+                        Task {
+                            await glassesManager.stopStream()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .controlSize(.small)
                 }
             }
         }

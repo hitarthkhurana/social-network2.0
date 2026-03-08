@@ -98,20 +98,25 @@ struct IdentifyView: View {
     // MARK: - Actions
 
     private func runIdentify() async {
+        print("🔍 Identify: capturing photo...")
         state = .capturing
 
         guard let jpeg = await glassesManager.capturePhoto() else {
+            print("❌ Identify: capture failed — stream not active?")
             state = .error("Could not capture photo — is the stream active?")
             return
         }
 
+        print("🔍 Identify: sending \(jpeg.count) bytes to /identify...")
         state = .waiting
 
         do {
             let result = try await BackendClient.shared.identify(jpeg: jpeg)
+            print("✅ Identify: name=\(result.name ?? "nil"), details=\(result.details ?? "nil")")
             state = .result(result)
             SpeechOutput.shared.speak(result.spokenDescription)
         } catch {
+            print("❌ Identify: \(error)")
             state = .error("Backend error: \(error.localizedDescription)")
         }
     }

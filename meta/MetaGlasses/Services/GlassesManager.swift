@@ -14,6 +14,7 @@ class GlassesManager: ObservableObject {
     @Published var isStreaming = false
     @Published var latestFrame: UIImage?
     @Published var statusMessage = "Not connected"
+    private var userStoppedStream = false
 
     // MARK: - Private
 
@@ -112,7 +113,7 @@ class GlassesManager: ObservableObject {
             for await state in wearables.registrationStateStream() {
                 print("📱 Registration state changed: \(state)")
                 isRegistered = (state == .registered)
-                if isRegistered && !isStreaming {
+                if isRegistered && !isStreaming && !userStoppedStream {
                     print("✅ Glasses are registered! Starting stream...")
                     await startStream()
                 } else if !isRegistered {
@@ -124,6 +125,7 @@ class GlassesManager: ObservableObject {
 
     func startStream() async {
         guard !isStreaming else { return }
+        userStoppedStream = false
 
         // Low resolution + 7 fps = best reliability over Bluetooth Classic bandwidth
         let config = StreamSessionConfig(
@@ -167,12 +169,14 @@ class GlassesManager: ObservableObject {
     }
 
     func stopStream() async {
+        userStoppedStream = true
         await streamSession?.stop()
         streamSession = nil
         stateToken = nil
         frameToken = nil
         photoToken = nil
         isStreaming = false
+        latestFrame = nil
         statusMessage = "Stream stopped"
     }
 

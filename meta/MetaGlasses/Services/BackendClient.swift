@@ -29,7 +29,9 @@ class BackendClient {
     static let shared = BackendClient()
 
     /// Point this at your team's server. Can be changed at runtime from the UI.
-    var baseURL: String = "http://localhost:8000"
+    /// Set this to your teammate's local IP, e.g. "http://192.168.1.42:8000"
+    /// Both devices must be on the same WiFi network.
+    var baseURL: String = "http://10.51.104.111:8000"
 
     // MARK: - Identify (fast path — single JPEG frame)
 
@@ -51,21 +53,38 @@ class BackendClient {
     // MARK: - Enroll (video clip — name + details extracted by backend)
 
     /// Uploads a .mp4 clip to the backend for face embedding + audio transcription.
-    func enroll(videoURL: URL) async throws -> EnrollResult {
+    /// If videoURL and audioURL are separate (merge failed), sends both as multipart fields.
+    func enroll(videoURL: URL, audioURL: URL? = nil) async throws -> EnrollResult {
         let url = try endpoint("/enroll")
         let boundary = "boundary-\(UUID().uuidString)"
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 60  // video uploads can take a few seconds
+        request.timeoutInterval = 60
 
         let videoData = try Data(contentsOf: videoURL)
-        request.httpBody = multipartBody(data: videoData,
-                                         boundary: boundary,
-                                         fieldName: "video",
-                                         filename: "clip.mp4",
-                                         mimeType: "video/mp4")
+        var body = Data()
+        let crlf = "\r\n"
+
+        // Video part
+        body += "--\(boundary)\(crlf)".utf8Data
+        body += "Content-Disposition: form-data; name=\"video\"; filename=\"clip.mp4\"\(crlf)".utf8Data
+        body += "Content-Type: video/mp4\(crlf)\(crlf)".utf8Data
+        body += videoData
+        body += "\(crlf)".utf8Data
+
+        // Audio part (sent separately if merge failed)
+        if let audioURL, let audioData = try? Data(contentsOf: audioURL) {
+            body += "--\(boundary)\(crlf)".utf8Data
+            body += "Content-Disposition: form-data; name=\"audio\"; filename=\"audio.m4a\"\(crlf)".utf8Data
+            body += "Content-Type: audio/mp4\(crlf)\(crlf)".utf8Data
+            body += audioData
+            body += "\(crlf)".utf8Data
+        }
+
+        body += "--\(boundary)--\(crlf)".utf8Data
+        request.httpBody = body
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response)

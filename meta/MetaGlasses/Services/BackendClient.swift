@@ -31,7 +31,7 @@ class BackendClient {
     /// Point this at your team's server. Can be changed at runtime from the UI.
     /// Set this to your teammate's local IP, e.g. "http://192.168.1.42:8000"
     /// Both devices must be on the same WiFi network.
-    var baseURL: String = "http://10.51.104.111:8000"
+    var baseURL: String = "https://ebdb63fb30f4fc21-128-77-49-34.serveousercontent.com"
 
     // MARK: - Identify (fast path — single JPEG frame)
 
